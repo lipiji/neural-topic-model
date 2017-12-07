@@ -35,19 +35,22 @@ model = NTM(dim_x, dim_x, hidden_size, latent_size, continuous, optimizer)
 
 print "training..."
 start = time.time()
-for i in xrange(100):
+for i in xrange(200):
     train_xy = data.batched_idx(train_idx, batch_size)
     error = 0.0
+    e_l1 = 0.0
     in_start = time.time()
     for batch_id, x_idx in train_xy.items():
         X = data.batched_news(x_idx, other_data)
-        cost, z = model.train(X, lr)
+        cost, l1, z = model.train(X, lr)
         error += cost
+        e_l1 += l1
         #print i, batch_id, "/", len(train_xy), cost
     in_time = time.time() - in_start
 
-    error /= len(train_xy);
-    print "Iter = " + str(i) + ", Loss = " + str(error) + ", Time = " + str(in_time)
+    error /= len(train_xy)
+    e_l1 /= len(train_xy)
+    print "Iter = " + str(i) + ", Loss = " + str(error) + ", L1 = " + str(e_l1) + ", Time = " + str(in_time)
 
 print "training finished. Time = " + str(time.time() - start)
 

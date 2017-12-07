@@ -62,6 +62,7 @@ class NTM(object):
         # decoder
         h_dec = T.nnet.relu(T.dot(self.z, self.W_zh) + self.b_zh)
         self.reconstruct = T.nnet.sigmoid(T.dot(h_dec, self.W_hy) + self.b_hy)
+        self.L_1 = T.sum(T.abs_(self.W_hy))
 
     def cost_nll(self, pred, label):
         cost = -T.log(pred) * label
@@ -85,7 +86,8 @@ class NTM(object):
 
     def define_train_test_funcs(self):
         cost = -T.mean(self.kld(self.mu, self.var) + self.multivariate_bernoulli(self.reconstruct, self.X)) 
-        
+        #cost += 0.0 * self.L_1
+
         gparams = []
         for param in self.params:
             #gparam = T.grad(cost, param)
@@ -96,7 +98,7 @@ class NTM(object):
         optimizer = eval(self.optimizer)
         updates = optimizer(self.params, gparams, lr)
         
-        self.train = theano.function(inputs = [self.X, lr], outputs = [cost, self.z], updates = updates)
+        self.train = theano.function(inputs = [self.X, lr], outputs = [cost, self.L_1, self.z], updates = updates)
         self.validate = theano.function(inputs = [self.X], outputs = [cost, self.reconstruct])
         self.project = theano.function(inputs = [self.X], outputs = self.mu)
         self.generate = theano.function(inputs = [self.z], outputs = self.reconstruct)
