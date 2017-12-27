@@ -23,7 +23,7 @@ latent_size = 50
 optimizer = "adam"
 continuous = False
 
-train_idx, valid_idx, test_idx, other_data = data.load("./data/movie.txt")
+train_idx, valid_idx, test_idx, other_data = data.load("./data/news_ap.txt")
 [docs, dic, w2i, i2w, bg] = other_data
 
 #for key, value in sorted(dic.iteritems(), key=lambda (k,v): (v,k)):
