@@ -6,13 +6,14 @@ from utils_pg import *
 from updates import *
 
 class NTM(object):
-    def __init__(self, in_size, out_size, hidden_size, latent_size, continuous, optimizer = "adadelta"):
+    def __init__(self, in_size, out_size, hidden_size, latent_size, back_ground, continuous, optimizer = "adadelta"):
         self.prefix = "NTM_"
         self.X = T.matrix("X")
         self.in_size = in_size
         self.out_size = out_size
         self.hidden_size = hidden_size
         self.latent_size = latent_size
+        self.back_ground = back_ground
         self.optimizer = optimizer
         self.continuous = continuous
 
@@ -39,13 +40,17 @@ class NTM(object):
         layer_id = "3"
         self.W_zh = init_weights((self.latent_size, self.latent_size), self.prefix + "W_zh" + layer_id)
         self.b_zh = init_bias(self.latent_size, self.prefix + "b_zh" + layer_id)
- 
-        self.params += [self.W_xh, self.b_xh, self.W_hu, self.b_hu, self.W_hsigma, self.b_hsigma, \
+
+        self.params += [self.W_xh, self.b_xh, \
+                        self.W_hu, self.b_hu, self.W_hsigma, self.b_hsigma, \
                         self.W_zh, self.b_zh]
 
         self.W_hy = init_weights((self.latent_size, self.out_size), self.prefix + "W_hy" + layer_id)
-        self.b_hy = init_bias(self.out_size, self.prefix + "b_hy" + layer_id)
-        self.params += [self.W_hy, self.b_hy]
+        #self.b_hy = init_bias(self.out_size, self.prefix + "b_hy" + layer_id)
+        
+        self.b_hy = theano.shared(floatX(self.back_ground), self.prefix + "b_hy" + layer_id)
+
+        self.params += [self.W_hy] # self.b_hy ?
 
         # encoder
         h_enc = T.nnet.relu(T.dot(self.X, self.W_xh) + self.b_xh)
@@ -62,17 +67,18 @@ class NTM(object):
         # decoder
         h_dec = T.nnet.relu(T.dot(self.z, self.W_zh) + self.b_zh)
         self.reconstruct = T.nnet.sigmoid(T.dot(h_dec, self.W_hy) + self.b_hy)
+        
+        self.L_1 = T.sum(T.sum(T.abs_(self.W_hy), axis=1) ** 2)
         self.L_1 = T.sum(T.abs_(self.W_hy))
-
+    
     def cost_nll(self, pred, label):
-        cost = -T.log(pred) * label
+        cost = -T.log(pred + 1e-16) * label
         cost = T.mean(T.sum(cost, axis = 1))
         return cost
 
     def cost_mse(self, pred, label):
         cost = T.mean((pred - label) ** 2)
         return cost
-
 
     def multivariate_bernoulli(self, y_pred, y_true):
         return T.sum(y_true * T.log(y_pred) + (1 - y_true) * T.log(1 - y_pred), axis=1)
@@ -85,8 +91,12 @@ class NTM(object):
         return 0.5 * T.sum(1 + T.log(var) - mu**2 - var, axis=1)
 
     def define_train_test_funcs(self):
-        cost = -T.mean(self.kld(self.mu, self.var) + self.multivariate_bernoulli(self.reconstruct, self.X)) 
-        #cost += 0.0 * self.L_1
+        #cost = -T.mean(self.kld(self.mu, self.var) + self.multivariate_bernoulli(self.reconstruct, self.X)) 
+        kld = -T.mean(self.kld(self.mu, self.var))
+        nll = self.cost_nll(self.reconstruct, self.X) 
+        cre = -T.mean(self.multivariate_bernoulli(self.reconstruct, self.X)) 
+        cost = cre + kld
+        #cost += 1e-8 * self.L_1
 
         gparams = []
         for param in self.params:
@@ -98,8 +108,8 @@ class NTM(object):
         optimizer = eval(self.optimizer)
         updates = optimizer(self.params, gparams, lr)
         
-        self.train = theano.function(inputs = [self.X, lr], outputs = [cost, self.L_1, self.z], updates = updates)
-        self.validate = theano.function(inputs = [self.X], outputs = [cost, self.reconstruct])
+        self.train = theano.function(inputs = [self.X, lr], outputs = [cost, cre, kld, nll, self.L_1, self.z], updates = updates)
+        self.validate = theano.function(inputs = [self.X], outputs = [cost, cre, kld, nll, self.reconstruct])
         self.project = theano.function(inputs = [self.X], outputs = self.mu)
         self.generate = theano.function(inputs = [self.z], outputs = self.reconstruct)
   

@@ -8,6 +8,13 @@ import theano.tensor as T
 import cPickle, gzip
 import string
 
+# NLTK
+import nltk, re, pprint
+from nltk import word_tokenize
+from nltk.tokenize import sent_tokenize
+nltk.data.path.append("/misc/projdata12/info_fil/pjli/local/nltk/");
+
+
 curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
 
 #data: http://deeplearning.net/data/mnist/mnist.pkl.gz
@@ -95,23 +102,37 @@ def load_stopwords():
         stop_words[line] = 1
     return stop_words
 
-def apnews():
+def load(file_path):
     dic = {}
     i2w = {}
     w2i = {}
     docs = {}
     stop_words = load_stopwords()
     
-    f = open("./data/news_ap.txt", "r")
+    table = string.maketrans("","")
+
+    f = open(file_path, "r")
     doc_id = 0
     for line in f:
         line = line.strip('\n').lower()
-        line = line.translate(None, string.punctuation)
-        words = line.split()
+        
+        #line = line.translate(table, string.punctuation)
+        #words = line.split()
+        
+        words = word_tokenize(line)
+        # remove tokens that don't contain letters or numbers  
+        words = [word for word in words if re.match('^[a-zA-A]*$', word) is not None]
+        words = [word for word in words if re.match('[a-zA-A0-9]', word) is not None]
+       
+        # remove stopwords 
+        words = [word for word in words if word not in stop_words]
+
+        # remove numbers
+        words = ['<NUM>' if re.match('[0-9]', word) is not None else word for word in words]
+
+        
         d = []
         for w in words:
-            if w in stop_words:
-                continue
             d.append(w)
             if w in dic:
                 dic[w] += 1
@@ -125,14 +146,33 @@ def apnews():
     f.close()
 
     print len(docs), len(w2i), len(i2w), len(dic)
+    print "filter dic..."
+    w2i = {}
+    i2w = {}
+    new_dic = {}
+    for w, tf in dic.items():
+        if tf > 1:
+            new_dic[w] = tf
+            w2i[w] = len(i2w)
+            i2w[len(i2w)] = w
+   
+    print len(docs), len(w2i), len(i2w), len(new_dic)
+
+    bg = np.zeros((len(new_dic),), dtype = theano.config.floatX)
+    ttf = 0.0
+    for w, tf in new_dic.items():
+        bg[w2i[w]] = np.log10(tf)
+        ttf += np.log10(tf)
+    bg /= ttf
+
     doc_idx = [i for i in xrange(len(docs))]
     spliter = (int) (len(docs) / 10.0 * 9)
     train_idx = doc_idx[0:spliter]
     valid_idx = doc_idx[spliter:len(docs)]
     test_idx = valid_idx
 
-    return train_idx, valid_idx, test_idx, [docs, dic, w2i, i2w]
-
+    return train_idx, valid_idx, test_idx, [docs, new_dic, w2i, i2w, bg]
+    
 def batched_idx(lst, batch_size = 1):
     np.random.shuffle(lst)
     data_xy = {}
@@ -147,19 +187,22 @@ def batched_idx(lst, batch_size = 1):
     return data_xy
 
 def batched_news(x_idx, data):
-    [docs, dic, w2i, i2w] = data
+    [docs, dic, w2i, i2w, bg] = data
     X = np.zeros((len(x_idx), len(dic)), dtype = theano.config.floatX)    
     for i in xrange(len(x_idx)):
         xi = x_idx[i]
         d = docs[xi]
         for w in d:
+            if w not in dic:
+                continue
             X[i, w2i[w]] += 1
-    
+  
+    X = np.log10(1 + X)
     for i in xrange(len(x_idx)):
         norm2 = np.linalg.norm(X[i,:])
         if norm2 != 0:
             X[i,:] /= norm2
-    
+
     return X
 
 
