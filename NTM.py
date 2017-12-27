@@ -47,10 +47,17 @@ class NTM(object):
 
         self.W_hy = init_weights((self.latent_size, self.out_size), self.prefix + "W_hy" + layer_id)
         #self.b_hy = init_bias(self.out_size, self.prefix + "b_hy" + layer_id)
-        
+        # user the back ground words
         self.b_hy = theano.shared(floatX(self.back_ground), self.prefix + "b_hy" + layer_id)
 
-        self.params += [self.W_hy] # self.b_hy ?
+        self.params += [self.W_hy]
+        
+        #self.params += [self.b_hy]
+        
+        # residual 
+        #self.W_res = init_weights((self.latent_size, self.latent_size), self.prefix + "W_res" + layer_id)
+        #self.params += [self.W_res]
+
 
         # encoder
         h_enc = T.nnet.relu(T.dot(self.X, self.W_xh) + self.b_xh)
@@ -66,11 +73,31 @@ class NTM(object):
 
         # decoder
         h_dec = T.nnet.relu(T.dot(self.z, self.W_zh) + self.b_zh)
+        
+        # shorcut
+        h_dec = T.nnet.relu(h_dec + self.z)
+
+        '''
+        # more generator layers
+        self.W_zh2 = init_weights((self.latent_size, self.latent_size), self.prefix + "W_zh2" + layer_id)
+        self.b_zh2 = init_bias(self.latent_size, self.prefix + "b_zh2" + layer_id)
+        self.params += [self.W_zh2, self.b_zh2]
+        h_dec = T.nnet.relu(T.dot(h_dec, self.W_zh2) + self.b_zh2)
+        h_dec = T.nnet.relu(h_dec + self.z)
+
+        self.W_zh3 = init_weights((self.latent_size, self.latent_size), self.prefix + "W_zh3" + layer_id)
+        self.b_zh3 = init_bias(self.latent_size, self.prefix + "b_zh3" + layer_id)
+        self.params += [self.W_zh3, self.b_zh3]
+        h_dec = T.nnet.relu(T.dot(h_dec, self.W_zh3) + self.b_zh3)
+        h_dec = T.nnet.relu(h_dec + self.z)
+        '''
+
         self.reconstruct = T.nnet.sigmoid(T.dot(h_dec, self.W_hy) + self.b_hy)
         
         self.L_1 = T.sum(T.sum(T.abs_(self.W_hy), axis=1) ** 2)
         self.L_1 = T.sum(T.abs_(self.W_hy))
-    
+   
+
     def cost_nll(self, pred, label):
         cost = -T.log(pred + 1e-16) * label
         cost = T.mean(T.sum(cost, axis = 1))
@@ -95,8 +122,8 @@ class NTM(object):
         kld = -T.mean(self.kld(self.mu, self.var))
         nll = self.cost_nll(self.reconstruct, self.X) 
         cre = -T.mean(self.multivariate_bernoulli(self.reconstruct, self.X)) 
-        cost = cre + kld
-        #cost += 1e-8 * self.L_1
+        cost = cre  + kld
+        #cost += 1e-5 * self.L_1
 
         gparams = []
         for param in self.params:
