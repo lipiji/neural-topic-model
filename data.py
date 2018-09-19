@@ -12,7 +12,6 @@ import string
 import nltk, re, pprint
 from nltk import word_tokenize
 from nltk.tokenize import sent_tokenize
-nltk.data.path.append("/misc/projdata12/info_fil/pjli/local/nltk/");
 
 
 curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))

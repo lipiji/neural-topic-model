@@ -68,6 +68,8 @@ for i in xrange(100):
 print "training finished. Time = " + str(time.time() - start)
 
 print "save model..."
+if not os.path.exists("./model/"):
+    os.makedirs("./model/")
 save_model("./model/vae_text.model", model)
 
 print "lode model..."
